@@ -1,0 +1,231 @@
+# Predict stock price for the next day using a simple moving average
+# Given prices for the last N days, we'll do a prediction for day N+1
+
+# In[1]:
+
+
+import matplotlib
+import numpy as np
+import pandas as pd
+import math
+
+from datetime import date, datetime
+from matplotlib import pyplot as plt
+from pylab import rcParams
+from sklearn.metrics import mean_squared_error
+
+
+# In[2]:
+
+
+# ignore numpy warnings
+np.warnings.filterwarnings('ignore')
+
+
+# In[3]:
+
+
+def mov_avg_preds(df, target, N, pred_min):
+    """
+    Given a dataframe, get prediction at timestep t using values from t-1, t-2, ..., t-N.
+    Using simple moving average.
+    Inputs
+        df         : dataframe with the values you want to predict. Can be of any length.
+        target     : name of the column we want to predict 
+        N          : get prediction at timestep t using values from t-1, t-2, ..., t-N
+        pred_min   : all predictions should be >= pred_min
+    Outputs
+        pred_list  : list. The predictions for target_col. np.array of length len(df)-offset.
+    """
+    pred_list = df[target].rolling(window = N, min_periods=1).mean() # len(pred_list) = len(df)
+    
+    # Add one timestep to the predictions
+    pred_list = np.concatenate((np.array([np.nan]), np.array(pred_list[:-1])))
+    
+    # If the values are < pred_min, set it to be pred_min
+    predictions = np.array(pred_list)
+    predictions[predictions < pred_min] = pred_min
+    
+    return predictions
+
+
+# In[4]:
+
+
+def get_mape(y_true, y_pred): 
+    """
+    Compute mean absolute percentage error (MAPE)
+    """
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+
+# In[5]:
+
+
+# load the dataset, clean up
+df = pd.read_csv("udow_5yr.csv", sep = ",")
+df_2019 = pd.read_csv("udow_2019.csv", sep = ",")
+df_6mo = pd.read_csv("udow_6mo.csv", sep = ",")
+df_90day = pd.read_csv("udow_90day.csv", sep = ",")
+
+# Convert Date column to datetime
+df.loc[:, 'date'] = pd.to_datetime(df['date'],format='%m/%d/%Y')
+df_2019.loc[:, 'date'] = pd.to_datetime(df_2019['date'],format='%m/%d/%Y')
+df_6mo.loc[:, 'date'] = pd.to_datetime(df_6mo['date'],format='%m/%d/%Y')
+df_90day.loc[:, 'date'] = pd.to_datetime(df_90day['date'],format='%m/%d/%Y')
+
+
+# Sort by datetime
+df.sort_values(by='date', inplace=True, ascending=True)
+df_2019.sort_values(by='date', inplace=True, ascending=True)
+df_6mo.sort_values(by='date', inplace=True, ascending=True)
+df_90day.sort_values(by='date', inplace=True, ascending=True)
+
+print(df.head(1))
+print(df_2019.head(1))
+print(df_6mo.head(1))
+print(df_90day.head(1))
+
+
+# In[6]:
+
+
+# Plot close over time
+rcParams['figure.figsize'] = 20, 12 # width 40, height 16
+
+ax = df.plot(x='date', y='close', style='b-', grid=True)
+ax.set_xlabel("date")
+ax.set_ylabel("USD")
+ax.set_title('UDOW Closing Price- 5 yr history')
+
+
+# In[7]:
+
+
+# Plot 2019 3 Month Closing prices
+rcParams['figure.figsize'] = 10, 8 # width 10, height 8
+
+a = df_2019.plot(x='date', y='close', style='b-', grid=True)
+a.legend(['3 Month closing price history from 2019'])
+a.set_xlabel("date")
+a.set_ylabel("USD")
+
+
+# In[8]:
+
+
+# plot six month closing prices from 2020 
+
+rcParams['figure.figsize'] = 10, 8 # width 10, height 8
+
+b = df_6mo.plot(x='date', y='close', style='b-', grid=True)
+b.legend(['6 month closing price history'])
+b.set_xlabel("date")
+b.set_ylabel("USD")
+
+
+# In[9]:
+
+
+# Plot 3 month closing prices from 2020
+
+rcParams['figure.figsize'] = 10, 8 # width 10, height 8
+
+c = df_90day.plot(x='date', y='close', style='b-', grid=True)
+c.legend(['90 day closing price history'])
+c.set_xlabel("date")
+c.set_ylabel("USD")
+
+
+# In[10]:
+
+
+# calculate RMSE and MAPE for Six Month Moving Average
+
+sixmonth_RMSE = []
+sixmonth_mape = []
+Nmax = 20
+
+
+for N in range(1, Nmax+1): # N is no. of samples to use to predict the next value
+    est_list = mov_avg_preds(df_6mo, 'close', N, 0)
+    est_list[0]=0
+    df_6mo.loc[:, 'est' + 'N' + str(N)] = est_list
+    sixmonth_RMSE.append(math.sqrt(mean_squared_error(est_list, df_6mo['close'])))
+    sixmonth_mape.append(get_mape(df_6mo['close'], est_list))
+print('Six Month RMSE = ' + str(sixmonth_RMSE))
+print('\nSix Month MAPE = ' + str(sixmonth_mape))
+
+
+# In[11]:
+
+
+# Calculate RMSE and MAPE for 3 Months Moving Average
+
+threemonth_RMSE = []
+threemonth_mape = []
+Nmax = 20
+
+
+for N in range(1, Nmax+1): # N is no. of samples to use to predict the next value
+    est_list = mov_avg_preds(df_90day, 'close', N, 0)
+    est_list[0]=0
+    df_90day.loc[:, 'est' + 'N' + str(N)] = est_list
+    threemonth_RMSE.append(math.sqrt(mean_squared_error(est_list, df_90day['close'])))
+    threemonth_mape.append(get_mape(df_90day['close'], est_list))
+print('3 Month RMSE = ' + str(threemonth_RMSE))
+print('\n3 Month MAPE = ' + str(threemonth_mape))
+
+
+# In[30]:
+
+
+# Calculate RMSE and MAPE for 2019 3 Months
+
+prevyr_RMSE = []
+prevyr_mape = []
+Nmax = 20
+
+
+for N in range(1, Nmax+1): # N is no. of samples to use to predict the next value
+    est_list = mov_avg_preds(df_2019, 'close', N, 0)
+    est_list[0]=0
+    df_2019.loc[:, 'est' + 'N' + str(N)] = est_list
+    prevyr_RMSE.append(math.sqrt(mean_squared_error(est_list, df_2019['close'])))
+    prevyr_mape.append(get_mape(df_2019['close'], est_list))
+print('2019 3 Month RMSE = ' + str(prevyr_RMSE))
+print('\n2019 3 Month MAPE = ' + str(prevyr_mape))
+
+
+# In[25]:
+
+
+# Plot the MAPE
+plt.figure(figsize=(12, 8), dpi=80)
+plt.plot(range(1, Nmax+1), threemonth_mape, 'x-', label='MAPE')
+plt.plot(range(1, Nmax+1), sixmonth_mape, 'x-')
+plt.plot(range(1, Nmax+1), prevyr_mape, 'x-')
+plt.legend(['3 Month MAPE','6 Month MAPE', '3 Month 2019 MAPE'])
+plt.grid()
+plt.xlabel('N')
+plt.ylabel('MAPE')
+plt.xlim([2, 21])
+plt.xticks([2, 5, 10, 15, 20])
+
+
+# In[29]:
+
+
+# Plot the RMSE
+plt.figure(figsize=(12, 8), dpi=80)
+plt.plot(range(1, Nmax+1), threemonth_RMSE, 'x-', label='MAPE')
+plt.plot(range(1, Nmax+1), sixmonth_RMSE, 'x-')
+plt.plot(range(1, Nmax+1), prevyr_RMSE, 'x-')
+plt.legend(['3 Month RMSE','6 Month RMSE', '3 Month 2019 RMSE'])
+plt.grid()
+plt.xlabel('N')
+plt.ylabel('RMSE')
+plt.xlim([2, 21])
+plt.xticks([2, 5, 10, 15, 20])
+
